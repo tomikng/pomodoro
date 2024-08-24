@@ -9,6 +9,13 @@ import { Progress } from '@/components/ui/progress'
 import { Input } from '@/components/ui/input'
 import { AlertCircle } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog'
 import { gsap } from 'gsap'
 import ImprovedStatistics from '@/components/ImprovedStatistics'
 
@@ -24,9 +31,15 @@ export default function PomodoroTimer() {
   const [totalFocusTime, setTotalFocusTime] = useState<number>(0)
   const [totalBreakTime, setTotalBreakTime] = useState<number>(0)
   const [totalLongBreakTime, setTotalLongBreakTime] = useState<number>(0)
+  const [showAlert, setShowAlert] = useState<boolean>(false)
 
   const timerRef = useRef<HTMLDivElement>(null)
   const dotsRef = useRef<HTMLDivElement>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+
+  useEffect(() => {
+    audioRef.current = new Audio('/alert-sound.mp3') // Make sure to add this sound file to your public folder
+  }, [])
 
   useEffect(() => {
     let timer: NodeJS.Timeout
@@ -81,19 +94,11 @@ export default function PomodoroTimer() {
   }, [sessionTime, isRunning, isBreak])
 
   const handleSessionEnd = (): void => {
-    if (isBreak) {
-      setIsBreak(false)
-      setTimeLeft(sessionTime * 60)
-    } else {
-      setSessionCount((prevCount) => prevCount + 1)
-      if (sessionCount % 4 === 3) {
-        setIsBreak(true)
-        setTimeLeft(longBreakTime * 60)
-      } else {
-        setIsBreak(true)
-        setTimeLeft(breakTime * 60)
-      }
+    setIsRunning(false)
+    if (audioRef.current) {
+      audioRef.current.play()
     }
+    setShowAlert(true)
   }
 
   const toggleTimer = (): void => setIsRunning(!isRunning)
@@ -139,25 +144,52 @@ export default function PomodoroTimer() {
     }
   }
 
-  const handleSessionTimeChange = (value: number) => {
-    setSessionTime(value)
+  const handleSessionTimeChange = (value: number | string) => {
+    const newValue = Math.max(1, Math.min(60, Number(value) || 1))
+    setSessionTime(newValue)
     if (!isRunning && !isBreak) {
-      setTimeLeft(value * 60)
+      setTimeLeft(newValue * 60)
     }
   }
 
-  const handleBreakTimeChange = (value: number) => {
-    setBreakTime(value)
+  const handleBreakTimeChange = (value: number | string) => {
+    const newValue = Math.max(1, Math.min(30, Number(value) || 1))
+    setBreakTime(newValue)
     if (!isRunning && isBreak && sessionCount % 4 !== 0) {
-      setTimeLeft(value * 60)
+      setTimeLeft(newValue * 60)
     }
   }
 
-  const handleLongBreakTimeChange = (value: number) => {
-    setLongBreakTime(value)
+  const handleLongBreakTimeChange = (value: number | string) => {
+    const newValue = Math.max(1, Math.min(60, Number(value) || 1))
+    setLongBreakTime(newValue)
     if (!isRunning && isBreak && sessionCount % 4 === 0) {
-      setTimeLeft(value * 60)
+      setTimeLeft(newValue * 60)
     }
+  }
+
+  const handleAddFiveMinutes = () => {
+    setTimeLeft((prev) => prev + 4 * 60)
+    setShowAlert(false)
+    setIsRunning(true)
+  }
+
+  const handleFinishSession = () => {
+    setShowAlert(false)
+    if (isBreak) {
+      setIsBreak(false)
+      setTimeLeft(sessionTime * 60)
+    } else {
+      setSessionCount((prevCount) => prevCount + 1)
+      if (sessionCount % 4 === 3) {
+        setIsBreak(true)
+        setTimeLeft(longBreakTime * 60)
+      } else {
+        setIsBreak(true)
+        setTimeLeft(breakTime * 60)
+      }
+    }
+    setIsRunning(true)
   }
 
   return (
@@ -213,7 +245,10 @@ export default function PomodoroTimer() {
               id="sessionTime"
               type="number"
               value={sessionTime}
-              onChange={(e) => handleSessionTimeChange(Number(e.target.value))}
+              onChange={(e) => handleSessionTimeChange(e.target.value)}
+              onBlur={(e) => handleSessionTimeChange(e.target.value)}
+              min={1}
+              max={60}
               className="w-16 md:w-20"
             />
             <Slider
@@ -235,7 +270,10 @@ export default function PomodoroTimer() {
               id="breakTime"
               type="number"
               value={breakTime}
-              onChange={(e) => handleBreakTimeChange(Number(e.target.value))}
+              onChange={(e) => handleBreakTimeChange(e.target.value)}
+              onBlur={(e) => handleBreakTimeChange(e.target.value)}
+              min={1}
+              max={30}
               className="w-16 md:w-20"
             />
             <Slider
@@ -257,9 +295,10 @@ export default function PomodoroTimer() {
               id="longBreakTime"
               type="number"
               value={longBreakTime}
-              onChange={(e) =>
-                handleLongBreakTimeChange(Number(e.target.value))
-              }
+              onChange={(e) => handleLongBreakTimeChange(e.target.value)}
+              onBlur={(e) => handleLongBreakTimeChange(e.target.value)}
+              min={1}
+              max={60}
               className="w-16 md:w-20"
             />
             <Slider
@@ -306,6 +345,27 @@ export default function PomodoroTimer() {
       <div className="text-center text-lg md:text-xl font-semibold">
         Sessions completed: {sessionCount}
       </div>
+
+      <Dialog open={showAlert} onOpenChange={setShowAlert}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {isBreak ? 'Break Finished' : 'Session Finished'}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            {isBreak
+              ? 'Your break time is over. Ready to focus again?'
+              : "Great job! You've completed a focus session. Time for a break?"}
+          </div>
+          <DialogFooter className="sm:justify-start">
+            <Button onClick={handleAddFiveMinutes}>Add 5 Minutes</Button>
+            <Button onClick={handleFinishSession}>
+              {isBreak ? 'Start Focus Session' : 'Start Break'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
