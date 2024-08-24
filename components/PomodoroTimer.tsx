@@ -47,7 +47,6 @@ type WorkerResponse = {
 export default function PomodoroTimer() {
   const [timeLeft, setTimeLeft] = useState(25 * 60)
   const [isRunning, setIsRunning] = useState(false)
-  const [isPaused, setIsPaused] = useState(false)
   const [sessionTime, setSessionTime] = useState(25)
   const [breakTime, setBreakTime] = useState(5)
   const [longBreakTime, setLongBreakTime] = useState(15)
@@ -100,7 +99,6 @@ export default function PomodoroTimer() {
           break
         case 'FINISHED':
           setIsRunning(false)
-          setIsPaused(false)
           setShowAlert(true)
           playNotificationSound()
           break
@@ -109,8 +107,7 @@ export default function PomodoroTimer() {
           setCurrentSession(payload.currentSession)
           setIsBreak(payload.isBreak)
           setIsLongBreak(payload.isLongBreak)
-          setIsRunning(false)
-          setIsPaused(false)
+          setIsRunning(true) // Start the timer after skipping
           break
       }
     },
@@ -143,20 +140,18 @@ export default function PomodoroTimer() {
   }, [sessionTime, breakTime, longBreakTime])
 
   const toggleTimer = () => {
-    if (isRunning && !isPaused) {
+    if (isRunning) {
       workerRef.current?.postMessage({ type: 'PAUSE' } as WorkerMessage)
-      setIsPaused(true)
+      setIsRunning(false)
     } else {
       workerRef.current?.postMessage({ type: 'START' } as WorkerMessage)
       setIsRunning(true)
-      setIsPaused(false)
     }
   }
 
   const resetTimer = () => {
     workerRef.current?.postMessage({ type: 'RESET' } as WorkerMessage)
     setIsRunning(false)
-    setIsPaused(false)
   }
 
   const handleSkipSession = () => {
@@ -210,11 +205,10 @@ export default function PomodoroTimer() {
 
   const handleFinishSession = () => {
     setShowAlert(false)
+    setIsRunning(true)
+    setIsBreak(true)
     workerRef.current?.postMessage({ type: 'SKIP' } as WorkerMessage)
     workerRef.current?.postMessage({ type: 'START' } as WorkerMessage)
-    setIsRunning(true)
-    setIsPaused(false)
-    setIsBreak(true)
   }
 
   const handleAddFiveMinutes = () => {
@@ -335,12 +329,8 @@ export default function PomodoroTimer() {
 
         <div className="flex justify-center space-x-4">
           <Button onClick={toggleTimer} className="px-8 py-3 text-lg">
-            {isRunning && !isPaused ? (
-              <Pause className="mr-2" />
-            ) : (
-              <Play className="mr-2" />
-            )}
-            {isRunning && !isPaused ? 'Pause' : 'Start'}
+            {isRunning ? <Pause className="mr-2" /> : <Play className="mr-2" />}
+            {isRunning ? 'Pause' : 'Start'}
           </Button>
           <Button onClick={resetTimer} className="px-8 py-3 text-lg">
             <RotateCcw className="mr-2" />
