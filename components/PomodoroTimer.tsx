@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
@@ -19,6 +19,12 @@ import {
 import { gsap } from 'gsap'
 import ImprovedStatistics from '@/components/ImprovedStatistics'
 
+// Define WorkerMessage type
+type WorkerMessage = {
+  type: 'START' | 'PAUSE' | 'RESET' | 'TICK' | 'SET_TIME'
+  payload?: number
+}
+
 export default function PomodoroTimer() {
   const [sessionTime, setSessionTime] = useState<number>(25)
   const [breakTime, setBreakTime] = useState<number>(5)
@@ -33,96 +39,24 @@ export default function PomodoroTimer() {
   const [totalBreakTime, setTotalBreakTime] = useState<number>(0)
   const [totalLongBreakTime, setTotalLongBreakTime] = useState<number>(0)
   const [showAlert, setShowAlert] = useState<boolean>(false)
-  const [_, setIsTabActive] = useState<boolean>(true)
+  const [notificationsPermission, setNotificationsPermission] =
+    useState<boolean>(false)
 
   const timerRef = useRef<HTMLDivElement>(null)
   const dotsRef = useRef<HTMLDivElement>(null)
   const audioContextRef = useRef<AudioContext | null>(null)
   const originalTitleRef = useRef<string>('')
-  const [notificationsPermission, setNotificationsPermission] =
-    useState<boolean>(false)
+  const workerRef = useRef<Worker | null>(null)
 
-  useEffect(() => {
-    originalTitleRef.current = document.title
-    audioContextRef.current = new (window.AudioContext ||
-      (window as any).webkitAudioContext)()
-
-    const handleVisibilityChange = () => {
-      setIsTabActive(!document.hidden)
-    }
-
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange)
+  const initializeAudioContext = useCallback(() => {
+    if (!audioContextRef.current) {
+      audioContextRef.current = new (window.AudioContext ||
+        (window as any).webkitAudioContext)()
     }
   }, [])
 
-  useEffect(() => {
-    let timer: NodeJS.Timeout
-    if (isRunning && !isPaused && timeLeft > 0) {
-      timer = setTimeout(() => {
-        setTimeLeft(timeLeft - 1)
-        if (!isBreak) setTotalFocusTime((prev) => prev + 1)
-        else if (sessionCount % 4 === 0)
-          setTotalLongBreakTime((prev) => prev + 1)
-        else setTotalBreakTime((prev) => prev + 1)
-
-        document.title = `(${formatTime(timeLeft - 1)}) ${originalTitleRef.current}`
-      }, 1000)
-    } else if (timeLeft === 0) {
-      handleSessionEnd()
-    }
-    return () => clearTimeout(timer)
-  }, [
-    isRunning,
-    isPaused,
-    timeLeft,
-    sessionTime,
-    breakTime,
-    longBreakTime,
-    isBreak,
-    sessionCount,
-  ])
-
-  useEffect(() => {
-    animateTimer()
-  }, [timeLeft])
-
-  useEffect(() => {
-    animateDots()
-  }, [sessionCount])
-
-  useEffect(() => {
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (isRunning || sessionCount > 0) {
-        e.preventDefault()
-        e.returnValue =
-          'You have an active Pomodoro session. Are you sure you want to leave?'
-      }
-    }
-    window.addEventListener('beforeunload', handleBeforeUnload)
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload)
-    }
-  }, [isRunning, sessionCount])
-
-  useEffect(() => {
-    if (!isRunning && !isBreak) {
-      setTimeLeft(sessionTime * 60)
-    }
-  }, [sessionTime, isRunning, isBreak])
-
-  const handleSessionEnd = (): void => {
-    setIsRunning(false)
-    setIsPaused(false)
-    playAlertSound()
-    showNotification()
-    setShowAlert(true)
-    document.title = `Timer Ended! - ${originalTitleRef.current}`
-  }
-
-  const playAlertSound = () => {
+  const playAlertSound = useCallback(() => {
+    initializeAudioContext()
     if (audioContextRef.current) {
       const oscillator = audioContextRef.current.createOscillator()
       oscillator.type = 'sine'
@@ -134,9 +68,9 @@ export default function PomodoroTimer() {
       oscillator.start()
       oscillator.stop(audioContextRef.current.currentTime + 1) // Play for 1 second
     }
-  }
+  }, [initializeAudioContext])
 
-  const showNotification = () => {
+  const showNotification = useCallback(() => {
     if (typeof window !== 'undefined' && 'Notification' in window) {
       if (Notification.permission === 'granted') {
         new Notification('Pomodoro Timer', {
@@ -152,30 +86,110 @@ export default function PomodoroTimer() {
         })
       }
     }
-  }
+  }, [isBreak])
 
-  const requestNotificationPermission = () => {
-    if (typeof window !== 'undefined' && 'Notification' in window) {
-      Notification.requestPermission().then((permission) => {
-        setNotificationsPermission(permission === 'granted')
+  const handleSessionEnd = useCallback((): void => {
+    setIsRunning(false)
+    setIsPaused(false)
+    playAlertSound()
+    showNotification()
+    setShowAlert(true)
+    document.title = `Timer Ended! - ${originalTitleRef.current}`
+  }, [playAlertSound, showNotification])
+
+  const updateTotalTime = useCallback(() => {
+    if (!isBreak) setTotalFocusTime((prev) => prev + 1)
+    else if (sessionCount % 4 === 0) setTotalLongBreakTime((prev) => prev + 1)
+    else setTotalBreakTime((prev) => prev + 1)
+  }, [isBreak, sessionCount])
+
+  useEffect(() => {
+    originalTitleRef.current = document.title
+
+    if (typeof Window !== 'undefined' && !workerRef.current) {
+      console.log('Attempting to create Web Worker')
+      try {
+        workerRef.current = new Worker('/timerWorker.js')
+        console.log('Web Worker created successfully')
+
+        workerRef.current.onmessage = (event: MessageEvent<WorkerMessage>) => {
+          console.log('Received message from worker:', event.data)
+          if (event.data.type === 'TICK') {
+            setTimeLeft((prevTime) => {
+              const newTime = prevTime - 1
+              console.log('New time:', newTime)
+              if (newTime <= 0) {
+                handleSessionEnd()
+              } else {
+                updateTotalTime()
+                document.title = `(${formatTime(newTime)}) ${originalTitleRef.current}`
+              }
+              return newTime
+            })
+          }
+        }
+
+        workerRef.current.postMessage({
+          type: 'SET_TIME',
+          payload: sessionTime * 60,
+        })
+      } catch (error) {
+        console.error('Failed to create Web Worker:', error)
+      }
+    }
+
+    return () => {
+      if (workerRef.current) {
+        console.log('Terminating Web Worker')
+        workerRef.current.terminate()
+        workerRef.current = null
+      }
+    }
+  }, [handleSessionEnd, sessionTime, updateTotalTime])
+
+  useEffect(() => {
+    animateTimer()
+  }, [timeLeft])
+
+  useEffect(() => {
+    animateDots()
+  }, [sessionCount])
+
+  useEffect(() => {
+    if (!isRunning && !isBreak) {
+      setTimeLeft(sessionTime * 60)
+      workerRef.current?.postMessage({
+        type: 'SET_TIME',
+        payload: sessionTime * 60,
       })
     }
-  }
+  }, [sessionTime, isRunning, isBreak])
 
-  const toggleTimer = (): void => {
+  const toggleTimer = useCallback((): void => {
+    initializeAudioContext()
+    console.log('Toggle Timer called. isRunning:', isRunning)
     if (isRunning) {
       setIsPaused(!isPaused)
+      console.log('Sending PAUSE message to worker')
+      workerRef.current?.postMessage({ type: 'PAUSE' })
     } else {
       setIsRunning(true)
       setIsPaused(false)
+      console.log('Sending START message to worker')
+      workerRef.current?.postMessage({ type: 'START' })
     }
-  }
+  }, [isRunning, isPaused, initializeAudioContext])
 
-  const resetTimer = (): void => {
+  const resetTimer = useCallback((): void => {
     setIsRunning(false)
     setIsPaused(false)
     setTimeLeft(sessionTime * 60)
-  }
+    workerRef.current?.postMessage({ type: 'RESET' })
+    workerRef.current?.postMessage({
+      type: 'SET_TIME',
+      payload: sessionTime * 60,
+    })
+  }, [sessionTime])
 
   const formatTime = (time: number): string => {
     const minutes = Math.floor(time / 60)
@@ -216,61 +230,108 @@ export default function PomodoroTimer() {
     }
   }
 
-  const handleSessionTimeChange = (value: number | string) => {
-    const newValue = Math.max(1, Math.min(60, Number(value) || 1))
-    setSessionTime(newValue)
-    if (!isRunning && !isBreak) {
-      setTimeLeft(newValue * 60)
-    }
-  }
+  const handleSessionTimeChange = useCallback(
+    (value: number | string) => {
+      const newValue = Math.max(1, Math.min(60, Number(value) || 1))
+      setSessionTime(newValue)
+      if (!isRunning && !isBreak) {
+        setTimeLeft(newValue * 60)
+        workerRef.current?.postMessage({
+          type: 'SET_TIME',
+          payload: newValue * 60,
+        })
+      }
+    },
+    [isRunning, isBreak]
+  )
 
-  const handleBreakTimeChange = (value: number | string) => {
-    const newValue = Math.max(1, Math.min(30, Number(value) || 1))
-    setBreakTime(newValue)
-    if (!isRunning && isBreak && sessionCount % 4 !== 0) {
-      setTimeLeft(newValue * 60)
-    }
-  }
+  const handleBreakTimeChange = useCallback(
+    (value: number | string) => {
+      const newValue = Math.max(1, Math.min(30, Number(value) || 1))
+      setBreakTime(newValue)
+      if (!isRunning && isBreak && sessionCount % 4 !== 0) {
+        setTimeLeft(newValue * 60)
+        workerRef.current?.postMessage({
+          type: 'SET_TIME',
+          payload: newValue * 60,
+        })
+      }
+    },
+    [isRunning, isBreak, sessionCount]
+  )
 
-  const handleLongBreakTimeChange = (value: number | string) => {
-    const newValue = Math.max(1, Math.min(60, Number(value) || 1))
-    setLongBreakTime(newValue)
-    if (!isRunning && isBreak && sessionCount % 4 === 0) {
-      setTimeLeft(newValue * 60)
-    }
-  }
+  const handleLongBreakTimeChange = useCallback(
+    (value: number | string) => {
+      const newValue = Math.max(1, Math.min(60, Number(value) || 1))
+      setLongBreakTime(newValue)
+      if (!isRunning && isBreak && sessionCount % 4 === 0) {
+        setTimeLeft(newValue * 60)
+        workerRef.current?.postMessage({
+          type: 'SET_TIME',
+          payload: newValue * 60,
+        })
+      }
+    },
+    [isRunning, isBreak, sessionCount]
+  )
 
-  const handleAddFiveMinutes = () => {
+  const handleAddFiveMinutes = useCallback(() => {
     setTimeLeft((prev) => prev + 5 * 60)
+    workerRef.current?.postMessage({
+      type: 'SET_TIME',
+      payload: timeLeft + 5 * 60,
+    })
     setShowAlert(false)
     setIsRunning(true)
     setIsPaused(false)
-  }
+    workerRef.current?.postMessage({ type: 'START' })
+  }, [timeLeft])
 
-  const handleFinishSession = () => {
+  const handleFinishSession = useCallback(() => {
     setShowAlert(false)
     if (isBreak) {
       setIsBreak(false)
       setTimeLeft(sessionTime * 60)
+      workerRef.current?.postMessage({
+        type: 'SET_TIME',
+        payload: sessionTime * 60,
+      })
     } else {
       setSessionCount((prevCount) => prevCount + 1)
       if (sessionCount % 4 === 3) {
         setIsBreak(true)
         setTimeLeft(longBreakTime * 60)
+        workerRef.current?.postMessage({
+          type: 'SET_TIME',
+          payload: longBreakTime * 60,
+        })
       } else {
         setIsBreak(true)
         setTimeLeft(breakTime * 60)
+        workerRef.current?.postMessage({
+          type: 'SET_TIME',
+          payload: breakTime * 60,
+        })
       }
     }
     setIsRunning(true)
     setIsPaused(false)
-  }
+    workerRef.current?.postMessage({ type: 'START' })
+  }, [isBreak, sessionTime, sessionCount, longBreakTime, breakTime])
 
   const getDotColor = (index: number) => {
     if (index < sessionCount % 4) return 'bg-green-500'
     if (index === sessionCount % 4) return 'bg-black'
     return 'bg-gray-300'
   }
+
+  const requestNotificationPermission = useCallback(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      Notification.requestPermission().then((permission) => {
+        setNotificationsPermission(permission === 'granted')
+      })
+    }
+  }, [])
 
   return (
     <div className="max-w-2xl mx-auto p-4 md:p-8 space-y-6 md:space-y-8 bg-white rounded-xl shadow-lg">
