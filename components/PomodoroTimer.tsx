@@ -210,7 +210,11 @@ export default function PomodoroTimer() {
 
   const handleFinishSession = () => {
     setShowAlert(false)
-    toggleTimer()
+    workerRef.current?.postMessage({ type: 'SKIP' } as WorkerMessage)
+    workerRef.current?.postMessage({ type: 'START' } as WorkerMessage)
+    setIsRunning(true)
+    setIsPaused(false)
+    setIsBreak(true)
   }
 
   const handleAddFiveMinutes = () => {
