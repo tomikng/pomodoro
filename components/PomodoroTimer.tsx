@@ -32,13 +32,26 @@ export default function PomodoroTimer() {
   const [totalBreakTime, setTotalBreakTime] = useState<number>(0)
   const [totalLongBreakTime, setTotalLongBreakTime] = useState<number>(0)
   const [showAlert, setShowAlert] = useState<boolean>(false)
+  const [_, setIsTabActive] = useState<boolean>(true)
 
   const timerRef = useRef<HTMLDivElement>(null)
   const dotsRef = useRef<HTMLDivElement>(null)
-  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const audioContextRef = useRef<AudioContext | null>(null)
+  const originalTitle = useRef<string>(document.title)
 
   useEffect(() => {
-    audioRef.current = new Audio('/alert-sound.mp3') // Make sure to add this sound file to your public folder
+    audioContextRef.current = new (window.AudioContext ||
+      (window as any).webkitAudioContext)()
+
+    const handleVisibilityChange = () => {
+      setIsTabActive(!document.hidden)
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
   }, [])
 
   useEffect(() => {
@@ -50,6 +63,9 @@ export default function PomodoroTimer() {
         else if (sessionCount % 4 === 0)
           setTotalLongBreakTime((prev) => prev + 1)
         else setTotalBreakTime((prev) => prev + 1)
+
+        // Update page title
+        document.title = `(${formatTime(timeLeft - 1)}) ${originalTitle.current}`
       }, 1000)
     } else if (timeLeft === 0) {
       handleSessionEnd()
@@ -95,10 +111,42 @@ export default function PomodoroTimer() {
 
   const handleSessionEnd = (): void => {
     setIsRunning(false)
-    if (audioRef.current) {
-      audioRef.current.play()
-    }
+    playAlertSound()
+    showNotification()
     setShowAlert(true)
+    document.title = `Timer Ended! - ${originalTitle.current}`
+  }
+
+  const playAlertSound = () => {
+    if (audioContextRef.current) {
+      const oscillator = audioContextRef.current.createOscillator()
+      oscillator.type = 'sine'
+      oscillator.frequency.setValueAtTime(
+        440,
+        audioContextRef.current.currentTime
+      ) // A4 note
+      oscillator.connect(audioContextRef.current.destination)
+      oscillator.start()
+      oscillator.stop(audioContextRef.current.currentTime + 1) // Play for 1 second
+    }
+  }
+
+  const showNotification = () => {
+    if ('Notification' in window && Notification.permission === 'granted') {
+      new Notification('Pomodoro Timer', {
+        body: isBreak ? 'Break time is over!' : 'Focus session completed!',
+        icon: '/path-to-your-icon.png', // Add an appropriate icon
+      })
+    } else if (
+      'Notification' in window &&
+      Notification.permission !== 'denied'
+    ) {
+      Notification.requestPermission().then((permission) => {
+        if (permission === 'granted') {
+          showNotification()
+        }
+      })
+    }
   }
 
   const toggleTimer = (): void => setIsRunning(!isRunning)
@@ -169,7 +217,7 @@ export default function PomodoroTimer() {
   }
 
   const handleAddFiveMinutes = () => {
-    setTimeLeft((prev) => prev + 4 * 60)
+    setTimeLeft((prev) => prev + 5 * 60)
     setShowAlert(false)
     setIsRunning(true)
   }
@@ -192,6 +240,12 @@ export default function PomodoroTimer() {
     setIsRunning(true)
   }
 
+  const getDotColor = (index: number) => {
+    if (index < sessionCount % 4) return 'bg-green-500'
+    if (index === sessionCount % 4) return 'bg-black'
+    return 'bg-gray-300'
+  }
+
   return (
     <div className="max-w-2xl mx-auto p-4 md:p-8 space-y-6 md:space-y-8 bg-white rounded-xl shadow-lg">
       <div className="text-center">
@@ -212,9 +266,7 @@ export default function PomodoroTimer() {
           {[...Array(4)].map((_, i) => (
             <div
               key={i}
-              className={`w-3 h-3 md:w-4 md:h-4 rounded-full ${
-                i < sessionCount % 4 ? 'bg-green-500' : 'bg-gray-300'
-              }`}
+              className={`w-3 h-3 md:w-4 md:h-4 rounded-full ${getDotColor(i)}`}
             />
           ))}
         </div>
@@ -322,6 +374,21 @@ export default function PomodoroTimer() {
         />
         <Label htmlFor="track-progress" className="text-sm md:text-base">
           Track Progress (In development)
+        </Label>
+      </div>
+
+      <div className="flex items-center space-x-2">
+        <Switch
+          id="notifications"
+          checked={Notification.permission === 'granted'}
+          onCheckedChange={() => {
+            if (Notification.permission !== 'denied') {
+              Notification.requestPermission()
+            }
+          }}
+        />
+        <Label htmlFor="notifications" className="text-sm md:text-base">
+          Enable Desktop Notifications
         </Label>
       </div>
 
