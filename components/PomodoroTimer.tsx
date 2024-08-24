@@ -37,9 +37,14 @@ export default function PomodoroTimer() {
   const timerRef = useRef<HTMLDivElement>(null)
   const dotsRef = useRef<HTMLDivElement>(null)
   const audioContextRef = useRef<AudioContext | null>(null)
-  const originalTitle = useRef<string>(document.title)
+  const originalTitleRef = useRef<string>('')
+  const [notificationsPermission, setNotificationsPermission] =
+    useState<boolean>(false)
 
   useEffect(() => {
+    // Set the original title once the component mounts (client-side only)
+    originalTitleRef.current = document.title
+
     audioContextRef.current = new (window.AudioContext ||
       (window as any).webkitAudioContext)()
 
@@ -64,8 +69,7 @@ export default function PomodoroTimer() {
           setTotalLongBreakTime((prev) => prev + 1)
         else setTotalBreakTime((prev) => prev + 1)
 
-        // Update page title
-        document.title = `(${formatTime(timeLeft - 1)}) ${originalTitle.current}`
+        document.title = `(${formatTime(timeLeft - 1)}) ${originalTitleRef.current}`
       }, 1000)
     } else if (timeLeft === 0) {
       handleSessionEnd()
@@ -114,7 +118,7 @@ export default function PomodoroTimer() {
     playAlertSound()
     showNotification()
     setShowAlert(true)
-    document.title = `Timer Ended! - ${originalTitle.current}`
+    document.title = `Timer Ended! - ${originalTitleRef.current}`
   }
 
   const playAlertSound = () => {
@@ -132,19 +136,27 @@ export default function PomodoroTimer() {
   }
 
   const showNotification = () => {
-    if ('Notification' in window && Notification.permission === 'granted') {
-      new Notification('Pomodoro Timer', {
-        body: isBreak ? 'Break time is over!' : 'Focus session completed!',
-        icon: '/path-to-your-icon.png', // Add an appropriate icon
-      })
-    } else if (
-      'Notification' in window &&
-      Notification.permission !== 'denied'
-    ) {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      if (Notification.permission === 'granted') {
+        new Notification('Pomodoro Timer', {
+          body: isBreak ? 'Break time is over!' : 'Focus session completed!',
+          icon: '/path-to-your-icon.png', // Add an appropriate icon
+        })
+      } else if (Notification.permission !== 'denied') {
+        Notification.requestPermission().then((permission) => {
+          setNotificationsPermission(permission === 'granted')
+          if (permission === 'granted') {
+            showNotification()
+          }
+        })
+      }
+    }
+  }
+
+  const requestNotificationPermission = () => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
       Notification.requestPermission().then((permission) => {
-        if (permission === 'granted') {
-          showNotification()
-        }
+        setNotificationsPermission(permission === 'granted')
       })
     }
   }
@@ -380,12 +392,11 @@ export default function PomodoroTimer() {
       <div className="flex items-center space-x-2">
         <Switch
           id="notifications"
-          checked={Notification.permission === 'granted'}
-          onCheckedChange={() => {
-            if (Notification.permission !== 'denied') {
-              Notification.requestPermission()
-            }
-          }}
+          checked={notificationsPermission}
+          onCheckedChange={requestNotificationPermission}
+          disabled={
+            typeof window === 'undefined' || !('Notification' in window)
+          }
         />
         <Label htmlFor="notifications" className="text-sm md:text-base">
           Enable Desktop Notifications
