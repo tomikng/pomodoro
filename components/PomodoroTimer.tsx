@@ -15,6 +15,14 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { gsap } from 'gsap'
+import {
+  Play,
+  Pause,
+  RotateCcw,
+  SkipForward,
+  Coffee,
+  Brain,
+} from 'lucide-react'
 
 type WorkerMessage = {
   type: 'START' | 'PAUSE' | 'RESET' | 'SET_TIME' | 'SKIP'
@@ -268,219 +276,219 @@ export default function PomodoroTimer() {
     }
   }, [currentSession])
 
-  // New useEffect for updating the document title
   useEffect(() => {
     document.title = `${formatTime(timeLeft)} - ${isBreak ? 'Break' : 'Focus'}`
   }, [timeLeft, isBreak])
 
   return (
-    <div className="max-w-2xl mx-auto p-4 md:p-8 space-y-6 md:space-y-8 bg-white rounded-xl shadow-lg">
-      <div className="text-center">
-        <h2 className="text-3xl md:text-4xl font-bold mb-4">
-          {isBreak ? 'Break Time' : 'Focus Time'}
-        </h2>
-        <div
-          ref={timerRef}
-          className="text-5xl md:text-6xl font-bold mb-4 md:mb-6"
-        >
-          {formatTime(timeLeft)}
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-background-start to-background-end overflow-hidden">
+      <div className="max-w-2xl mx-auto p-8 space-y-8 bg-card rounded-xl shadow-lg relative">
+        <div className="text-center">
+          <h2 className="text-4xl font-bold mb-4 flex items-center justify-center">
+            {isBreak ? (
+              <>
+                <Coffee className="mr-2" />
+                Break Time
+              </>
+            ) : (
+              <>
+                <Brain className="mr-2" />
+                Focus Time
+              </>
+            )}
+          </h2>
+          <div className="relative w-48 h-48 mx-auto mb-6">
+            <svg viewBox="0 0 100 100" className="w-full h-full">
+              <circle
+                cx="50"
+                cy="50"
+                r="45"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                className="text-muted"
+              />
+            </svg>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div
+                className="text-5xl font-bold font-mono"
+                style={{ fontVariantNumeric: 'tabular-nums' }}
+              >
+                {formatTime(timeLeft)}
+              </div>
+            </div>
+          </div>
+          <Progress value={calculateProgress()} className="w-full h-4 mb-6" />
+          <div ref={dotsRef} className="flex justify-center space-x-2 mb-4">
+            {[...Array(4)].map((_, i) => (
+              <div
+                key={i}
+                className={`w-5 h-5 rounded-full ${getDotColor(i)}`}
+              />
+            ))}
+          </div>
         </div>
-        <Progress
-          value={calculateProgress()}
-          className="w-full h-3 md:h-4 mb-4 md:mb-6"
-        />
-        <div ref={dotsRef} className="flex justify-center space-x-2 mb-4">
-          {[...Array(4)].map((_, i) => (
-            <div
-              key={i}
-              className={`w-4 h-4 md:w-5 md:h-5 rounded-full ${getDotColor(i)}`}
-            />
-          ))}
+
+        <div className="flex justify-center space-x-4">
+          <Button onClick={toggleTimer} className="px-8 py-3 text-lg">
+            {isRunning && !isPaused ? (
+              <Pause className="mr-2" />
+            ) : (
+              <Play className="mr-2" />
+            )}
+            {isRunning && !isPaused ? 'Pause' : 'Start'}
+          </Button>
+          <Button onClick={resetTimer} className="px-8 py-3 text-lg">
+            <RotateCcw className="mr-2" />
+            Reset
+          </Button>
+          <Button onClick={handleSkipSession} className="px-8 py-3 text-lg">
+            <SkipForward className="mr-2" />
+            {isBreak ? 'Skip Break' : 'Skip Session'}
+          </Button>
         </div>
-      </div>
 
-      <div className="flex justify-center space-x-4">
-        <Button
-          onClick={toggleTimer}
-          className="px-6 py-2 md:px-8 md:py-3 text-base md:text-lg"
-        >
-          {isRunning && !isPaused ? 'Pause' : 'Start'}
-        </Button>
-        <Button
-          onClick={resetTimer}
-          className="px-6 py-2 md:px-8 md:py-3 text-base md:text-lg"
-        >
-          Reset
-        </Button>
-        <Button
-          onClick={handleSkipSession}
-          className="px-6 py-2 md:px-8 md:py-3 text-base md:text-lg"
-        >
-          {isBreak ? 'Skip Break' : 'Skip Session'}
-        </Button>
-      </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div>
+            <Label htmlFor="sessionTime" className="mb-2 block">
+              Focus Time (minutes)
+            </Label>
+            <div className="flex items-center space-x-2">
+              <Input
+                id="sessionTime"
+                type="number"
+                value={sessionTime}
+                onChange={(e) => handleSessionTimeChange(e.target.value)}
+                onBlur={(e) => handleSessionTimeChange(e.target.value)}
+                min={1}
+                max={60}
+                className="w-20"
+                disabled={isRunning}
+              />
+              <Slider
+                min={1}
+                max={60}
+                step={1}
+                value={[sessionTime]}
+                onValueChange={(value) => handleSessionTimeChange(value[0])}
+                className="flex-grow"
+                disabled={isRunning}
+              />
+            </div>
+          </div>
+          <div>
+            <Label htmlFor="breakTime" className="mb-2 block">
+              Break Time (minutes)
+            </Label>
+            <div className="flex items-center space-x-2">
+              <Input
+                id="breakTime"
+                type="number"
+                value={breakTime}
+                onChange={(e) => handleBreakTimeChange(e.target.value)}
+                onBlur={(e) => handleBreakTimeChange(e.target.value)}
+                min={1}
+                max={30}
+                className="w-20"
+                disabled={isRunning}
+              />
+              <Slider
+                min={1}
+                max={30}
+                step={1}
+                value={[breakTime]}
+                onValueChange={(value) => handleBreakTimeChange(value[0])}
+                className="flex-grow"
+                disabled={isRunning}
+              />
+            </div>
+          </div>
+          <div>
+            <Label htmlFor="longBreakTime" className="mb-2 block">
+              Long Break Time (minutes)
+            </Label>
+            <div className="flex items-center space-x-2">
+              <Input
+                id="longBreakTime"
+                type="number"
+                value={longBreakTime}
+                onChange={(e) => handleLongBreakTimeChange(e.target.value)}
+                onBlur={(e) => handleLongBreakTimeChange(e.target.value)}
+                min={1}
+                max={60}
+                className="w-20"
+                disabled={isRunning}
+              />
+              <Slider
+                min={1}
+                max={60}
+                step={1}
+                value={[longBreakTime]}
+                onValueChange={(value) => handleLongBreakTimeChange(value[0])}
+                className="flex-grow"
+                disabled={isRunning}
+              />
+            </div>
+          </div>
+        </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
-        <div>
-          <Label htmlFor="sessionTime" className="mb-2 block">
-            Focus Time (minutes)
+        <div className="flex items-center space-x-2">
+          <Switch
+            id="track-progress"
+            checked={trackProgress}
+            disabled={true}
+            onCheckedChange={setTrackProgress}
+          />
+          <Label htmlFor="track-progress" className="text-base">
+            Track Progress (In development)
           </Label>
-          <div className="flex items-center space-x-2">
-            <Input
-              id="sessionTime"
-              type="number"
-              value={sessionTime}
-              onChange={(e) => handleSessionTimeChange(e.target.value)}
-              onBlur={(e) => handleSessionTimeChange(e.target.value)}
-              min={1}
-              max={60}
-              className="w-16 md:w-20"
-              disabled={isRunning}
-            />
-            <Slider
-              min={1}
-              max={60}
-              step={1}
-              value={[sessionTime]}
-              onValueChange={(value) => handleSessionTimeChange(value[0])}
-              className="flex-grow"
-              disabled={isRunning}
-            />
-          </div>
         </div>
-        <div>
-          <Label htmlFor="breakTime" className="mb-2 block">
-            Break Time (minutes)
-          </Label>
-          <div className="flex items-center space-x-2">
-            <Input
-              id="breakTime"
-              type="number"
-              value={breakTime}
-              onChange={(e) => handleBreakTimeChange(e.target.value)}
-              onBlur={(e) => handleBreakTimeChange(e.target.value)}
-              min={1}
-              max={30}
-              className="w-16 md:w-20"
-              disabled={isRunning}
-            />
-            <Slider
-              min={1}
-              max={30}
-              step={1}
-              value={[breakTime]}
-              onValueChange={(value) => handleBreakTimeChange(value[0])}
-              className="flex-grow"
-              disabled={isRunning}
-            />
-          </div>
-        </div>
-        <div>
-          <Label htmlFor="longBreakTime" className="mb-2 block">
-            Long Break Time (minutes)
-          </Label>
-          <div className="flex items-center space-x-2">
-            <Input
-              id="longBreakTime"
-              type="number"
-              value={longBreakTime}
-              onChange={(e) => handleLongBreakTimeChange(e.target.value)}
-              onBlur={(e) => handleLongBreakTimeChange(e.target.value)}
-              min={1}
-              max={60}
-              className="w-16 md:w-20"
-              disabled={isRunning}
-            />
-            <Slider
-              min={1}
-              max={60}
-              step={1}
-              value={[longBreakTime]}
-              onValueChange={(value) => handleLongBreakTimeChange(value[0])}
-              className="flex-grow"
-              disabled={isRunning}
-            />
-          </div>
-        </div>
+
+        <Dialog open={showAlert} onOpenChange={setShowAlert}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>
+                {isBreak ? 'Break Finished' : 'Session Finished'}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="py-4">
+              {isBreak
+                ? 'Your break time is over. Ready to focus again?'
+                : "Great job! You've completed a focus session. Time for a break?"}
+            </div>
+            <DialogFooter className="sm:justify-start">
+              <Button onClick={handleAddFiveMinutes}>Add 5 Minutes</Button>
+              <Button onClick={handleFinishSession}>
+                {isBreak ? 'Start Focus Session' : 'Start Break'}
+              </Button>
+              <Button onClick={handleSkipSession}>
+                {isBreak ? 'Skip Break' : 'Skip Session'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog
+          open={showSkipSessionConfirmation}
+          onOpenChange={setShowSkipSessionConfirmation}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Skip Session Confirmation</DialogTitle>
+            </DialogHeader>
+            <div className="py-4">
+              Are you sure you want to skip this focus session? Or are you just
+              feeling lazy?
+            </div>
+            <DialogFooter className="sm:justify-start">
+              <Button onClick={() => setShowSkipSessionConfirmation(false)}>
+                Cancel
+              </Button>
+              <Button onClick={confirmSkipSession}>Yes, Skip Session</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
-
-      <div className="flex items-center space-x-2">
-        <Switch
-          id="track-progress"
-          checked={trackProgress}
-          disabled={true}
-          onCheckedChange={setTrackProgress}
-        />
-        <Label htmlFor="track-progress" className="text-sm md:text-base">
-          Track Progress (In development)
-        </Label>
-      </div>
-
-      {/*<Alert>*/}
-      {/*  <AlertCircle className="h-4 w-4 md:h-5 md:w-5" />*/}
-      {/*  <AlertTitle className="text-sm md:text-base">*/}
-      {/*    Local Storage Only*/}
-      {/*  </AlertTitle>*/}
-      {/*  <AlertDescription className="text-xs md:text-sm">*/}
-      {/*    Currently, all progress is stored locally in your browser. Your data*/}
-      {/*    will be lost if you clear your browser data.*/}
-      {/*  </AlertDescription>*/}
-      {/*</Alert>*/}
-
-      {/*<ImprovedStatistics*/}
-      {/*  totalFocusTime={formatTime(totalFocusTime)}*/}
-      {/*  totalBreakTime={formatTime(totalBreakTime)}*/}
-      {/*  totalLongBreakTime={formatTime(totalLongBreakTime)}*/}
-      {/*/>*/}
-
-      {/*<div className="text-center text-lg md:text-xl font-semibold">*/}
-      {/*  Sessions completed: {sessionCount}*/}
-      {/*</div>*/}
-
-      <Dialog open={showAlert} onOpenChange={setShowAlert}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {isBreak ? 'Break Finished' : 'Session Finished'}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="py-4">
-            {isBreak
-              ? 'Your break time is over. Ready to focus again?'
-              : "Great job! You've completed a focus session. Time for a break?"}
-          </div>
-          <DialogFooter className="sm:justify-start">
-            <Button onClick={handleAddFiveMinutes}>Add 5 Minutes</Button>
-            <Button onClick={handleFinishSession}>
-              {isBreak ? 'Start Focus Session' : 'Start Break'}
-            </Button>
-            <Button onClick={handleSkipSession}>
-              {isBreak ? 'Skip Break' : 'Skip Session'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={showSkipSessionConfirmation}
-        onOpenChange={setShowSkipSessionConfirmation}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Skip Session Confirmation</DialogTitle>
-          </DialogHeader>
-          <div className="py-4">
-            Are you sure you want to skip this focus session? Or are you just
-            feeling lazy?
-          </div>
-          <DialogFooter className="sm:justify-start">
-            <Button onClick={() => setShowSkipSessionConfirmation(false)}>
-              Cancel
-            </Button>
-            <Button onClick={confirmSkipSession}>Yes, Skip Session</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }
