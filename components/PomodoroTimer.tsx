@@ -25,6 +25,7 @@ export default function PomodoroTimer() {
   const [longBreakTime, setLongBreakTime] = useState<number>(15)
   const [timeLeft, setTimeLeft] = useState<number>(sessionTime * 60)
   const [isRunning, setIsRunning] = useState<boolean>(false)
+  const [isPaused, setIsPaused] = useState<boolean>(false)
   const [sessionCount, setSessionCount] = useState<number>(0)
   const [isBreak, setIsBreak] = useState<boolean>(false)
   const [trackProgress, setTrackProgress] = useState<boolean>(false)
@@ -42,9 +43,7 @@ export default function PomodoroTimer() {
     useState<boolean>(false)
 
   useEffect(() => {
-    // Set the original title once the component mounts (client-side only)
     originalTitleRef.current = document.title
-
     audioContextRef.current = new (window.AudioContext ||
       (window as any).webkitAudioContext)()
 
@@ -61,7 +60,7 @@ export default function PomodoroTimer() {
 
   useEffect(() => {
     let timer: NodeJS.Timeout
-    if (isRunning && timeLeft > 0) {
+    if (isRunning && !isPaused && timeLeft > 0) {
       timer = setTimeout(() => {
         setTimeLeft(timeLeft - 1)
         if (!isBreak) setTotalFocusTime((prev) => prev + 1)
@@ -77,6 +76,7 @@ export default function PomodoroTimer() {
     return () => clearTimeout(timer)
   }, [
     isRunning,
+    isPaused,
     timeLeft,
     sessionTime,
     breakTime,
@@ -115,6 +115,7 @@ export default function PomodoroTimer() {
 
   const handleSessionEnd = (): void => {
     setIsRunning(false)
+    setIsPaused(false)
     playAlertSound()
     showNotification()
     setShowAlert(true)
@@ -161,14 +162,25 @@ export default function PomodoroTimer() {
     }
   }
 
-  const toggleTimer = (): void => setIsRunning(!isRunning)
+  const toggleTimer = (): void => {
+    if (isRunning) {
+      setIsPaused(!isPaused)
+    } else {
+      setIsRunning(true)
+      setIsPaused(false)
+    }
+  }
+
+  const resetTimer = (): void => {
+    setIsRunning(false)
+    setIsPaused(false)
+    setTimeLeft(sessionTime * 60)
+  }
 
   const formatTime = (time: number): string => {
     const minutes = Math.floor(time / 60)
     const seconds = time % 60
-    return `${minutes.toString().padStart(2, '0')}:${seconds
-      .toString()
-      .padStart(2, '0')}`
+    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
   }
 
   const calculateProgress = (): number => {
@@ -232,6 +244,7 @@ export default function PomodoroTimer() {
     setTimeLeft((prev) => prev + 5 * 60)
     setShowAlert(false)
     setIsRunning(true)
+    setIsPaused(false)
   }
 
   const handleFinishSession = () => {
@@ -250,6 +263,7 @@ export default function PomodoroTimer() {
       }
     }
     setIsRunning(true)
+    setIsPaused(false)
   }
 
   const getDotColor = (index: number) => {
@@ -289,10 +303,10 @@ export default function PomodoroTimer() {
           onClick={toggleTimer}
           className="px-6 py-2 md:px-8 md:py-3 text-base md:text-lg"
         >
-          {isRunning ? 'Pause' : 'Start'}
+          {isRunning && !isPaused ? 'Pause' : 'Start'}
         </Button>
         <Button
-          onClick={() => setTimeLeft(sessionTime * 60)}
+          onClick={resetTimer}
           className="px-6 py-2 md:px-8 md:py-3 text-base md:text-lg"
         >
           Reset
@@ -314,6 +328,7 @@ export default function PomodoroTimer() {
               min={1}
               max={60}
               className="w-16 md:w-20"
+              disabled={isRunning}
             />
             <Slider
               min={1}
@@ -322,6 +337,7 @@ export default function PomodoroTimer() {
               value={[sessionTime]}
               onValueChange={(value) => handleSessionTimeChange(value[0])}
               className="flex-grow"
+              disabled={isRunning}
             />
           </div>
         </div>
@@ -339,6 +355,7 @@ export default function PomodoroTimer() {
               min={1}
               max={30}
               className="w-16 md:w-20"
+              disabled={isRunning}
             />
             <Slider
               min={1}
@@ -347,6 +364,7 @@ export default function PomodoroTimer() {
               value={[breakTime]}
               onValueChange={(value) => handleBreakTimeChange(value[0])}
               className="flex-grow"
+              disabled={isRunning}
             />
           </div>
         </div>
@@ -364,6 +382,7 @@ export default function PomodoroTimer() {
               min={1}
               max={60}
               className="w-16 md:w-20"
+              disabled={isRunning}
             />
             <Slider
               min={1}
@@ -372,6 +391,7 @@ export default function PomodoroTimer() {
               value={[longBreakTime]}
               onValueChange={(value) => handleLongBreakTimeChange(value[0])}
               className="flex-grow"
+              disabled={isRunning}
             />
           </div>
         </div>
